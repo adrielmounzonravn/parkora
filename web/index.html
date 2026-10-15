@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <title>Parkora – Reserve your spot</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#/"><img src="logo.svg" alt="Parkora" width="96" height="31"></a>
+      <nav class="roles">
+        <a href="#/" data-role="conductor" data-i18n="role.driver">Driver</a>
+        <a href="#/inspector" data-role="inspector" data-i18n="role.inspector">Parking attendant</a>
+        <a href="#/alcaldia" data-role="alcaldia" data-i18n="role.city">City government</a>
+      </nav>
+      <button class="lang" id="lang" type="button" data-i18n="lang.switch">ES</button>
+    </div>
+  </header>
+  <main id="app"></main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="demo.js"></script>
+  <script src="i18n.js"></script>
+  <script src="data.js"></script>
+  <script src="store.js"></script>
+  <script src="driver.js"></script>
+  <script src="staff.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

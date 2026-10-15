@@ -1,0 +1,9 @@
+# Working notes and tooling (not part of the deliverable)
+CLAUDE.md
+mvp.md
+.claude/
+.frontend-slides/
+.playwright-mcp/
+logos/preview.html
+logos/preview.png
+.DS_Store

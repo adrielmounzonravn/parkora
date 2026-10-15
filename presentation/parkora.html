@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Parkora</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Overpass:ital,wght@0,400;0,600;0,800;0,900;1,600;1,800&family=Overpass+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* ===========================================
+   THEME: "Curbside": asphalt, road paint, sign blue, curb amber.
+   Change these tokens to restyle the whole deck.
+   =========================================== */
+:root {
+  --asphalt: #14161B;
+  --asphalt-2: #1D2027;
+  --asphalt-3: #2A2D34;
+  --paint: #EDEBE4;
+  --paint-dim: #B9BBC2;
+  --muted: #8E919A;
+  --blue: #2B59E8;
+  --blue-lite: #7C97FF;
+  --amber: #FFB020;
+  --red: #FF5A4E;
+  --green: #3DDC84;
+  --stage-bg: #000;
+  --slide-bg: var(--asphalt);
+  --logo-blue: var(--blue-lite);
+  --logo-amber: var(--amber);
+  --logo-ink: var(--paint);
+  --font-display: 'Overpass', sans-serif;
+  --font-mono: 'Overpass Mono', monospace;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ===========================================
+   FIXED 16:9 STAGE: MANDATORY BASE STYLES (viewport-base.css)
+   =========================================== */
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--stage-bg, #000); }
+.deck-viewport { position: fixed; inset: 0; overflow: hidden; background: var(--stage-bg, #000); }
+.deck-stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden; transform-origin: 0 0; background: var(--slide-bg, #fff); }
+.slide { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: hidden; display: block; visibility: hidden; opacity: 0; pointer-events: none; background: var(--slide-bg, #fff); }
+.slide.active, .slide.visible { visibility: visible; opacity: 1; pointer-events: auto; z-index: 1; }
+img, video, canvas, svg { max-width: 100%; max-height: 100%; }
+.deck-controls { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 1000; }
+@media print {
+  html, body { width: 1920px; height: auto; overflow: visible; background: #fff; }
+  .deck-viewport { position: static; overflow: visible; background: #fff; }
+  .deck-stage { position: static; width: auto; height: auto; transform: none !important; background: none; }
+  .slide { position: relative; display: block !important; visibility: visible !important; opacity: 1 !important; pointer-events: auto !important; width: 1920px; height: 1080px; break-after: page; page-break-after: always; }
+  .slide:last-child { break-after: auto; page-break-after: auto; }
+  .deck-controls { display: none !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.2s !important; }
+}
+
+/* ===========================================
+   SLIDE SURFACE: asphalt gradient + grain overlay
+   =========================================== */
+.slide {
+  font-family: var(--font-display); color: var(--paint);
+  background: radial-gradient(1000px 700px at 80% 30%, #232733 0%, transparent 70%),
+              radial-gradient(800px 600px at 5% 100%, #1b1e25 0%, transparent 70%), var(--asphalt);
+}
+.grain { position: absolute; inset: 0; z-index: 50; opacity: .32; mix-blend-mode: overlay; pointer-events: none; }
+.lb { stroke: var(--logo-blue); } .la { stroke: var(--logo-amber); } .lk { stroke: var(--logo-ink); }
+
+/* ===========================================
+   DECK CHROME: logo, section label, page number, painted lane line
+   =========================================== */
+.chrome { position: absolute; left: 110px; right: 110px; top: 64px; height: 44px; display: flex; align-items: center; gap: 28px; font-family: var(--font-mono); font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.chrome .logo { height: 40px; width: 140px; }
+.chrome .sec { color: var(--amber); }
+.chrome .pg { margin-left: auto; }
+.lane { position: absolute; left: 110px; right: 110px; bottom: 44px; height: 6px; background: repeating-linear-gradient(90deg, rgba(237,235,228,.16) 0 80px, transparent 80px 120px); }
+
+/* ===========================================
+   TYPOGRAPHY
+   =========================================== */
+.abs { position: absolute; }
+.title { position: absolute; left: 110px; top: 150px; font-weight: 900; font-size: 112px; line-height: .9; letter-spacing: -.02em; text-transform: uppercase; }
+.amber { color: var(--amber); } .blue { color: var(--blue-lite); } .red { color: var(--red); } .dim { color: var(--muted); }
+.mono { font-family: var(--font-mono); letter-spacing: .1em; text-transform: uppercase; }
+.k { font-size: 36px; font-weight: 600; line-height: 1.25; color: var(--paint-dim); }
+.k b { color: var(--paint); font-weight: 800; }
+.big { font-weight: 900; line-height: .9; letter-spacing: -.02em; }
+.chip { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-weight: 700; font-size: 22px; letter-spacing: .08em; text-transform: uppercase; padding: 12px 18px 8px; border: 2px solid rgba(237,235,228,.3); border-radius: 8px; color: var(--paint-dim); white-space: nowrap; }
+.chip.amber { border-color: var(--amber); color: var(--amber); }
+.chip.blue { border-color: var(--blue-lite); color: var(--blue-lite); }
+.chips { display: flex; flex-wrap: wrap; gap: 14px; }
+/* Overpass's middot hugs the next word; give it even breathing room */
+.sep { display: inline-block; margin: 0 .16em 0 -.08em; opacity: .7; }
+
+/* Icons: stroke icons from the sprite, colored with currentColor */
+.ic { width: 56px; height: 56px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* ===========================================
+   SIGNATURE COMPONENT: the parking bay
+   Painted lines on left, right and top, open toward the street.
+   =========================================== */
+.bay { position: absolute; border: 6px solid rgba(237,235,228,.8); border-bottom: 0; padding: 40px 44px; }
+.bay.amber { border-color: var(--amber); box-shadow: inset 0 0 120px rgba(255,176,32,.08); }
+.bay.ghost { border-color: rgba(237,235,228,.25); }
+.bay .num { position: absolute; right: 30px; bottom: 18px; font-weight: 900; font-size: 80px; opacity: .12; line-height: 1; }
+
+/* ===========================================
+   MOTION: everything reveals when its slide becomes .visible
+   Use style="--d:N" to stagger (N × 110 ms).
+   =========================================== */
+.reveal { opacity: 0; }
+.slide.visible .reveal { animation: up .8s var(--ease) both; animation-delay: calc(var(--d, 0) * 110ms + 120ms); }
+.slide.visible .reveal-l { animation-name: left; }
+.slide.visible .reveal-s { animation-name: pop; }
+@keyframes up { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: none; } }
+@keyframes left { from { opacity: 0; transform: translateX(-40px); } to { opacity: 1; transform: none; } }
+@keyframes pop { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
+@keyframes paint { from { stroke-dashoffset: 1400; } to { stroke-dashoffset: 0; } }
+@keyframes grow { from { transform: scaleX(0); } }
+@keyframes drop { from { opacity: 0; transform: translateY(-40px); } to { opacity: 1; transform: none; } }
+@keyframes arc { from { stroke-dashoffset: 628.3; } }
+@keyframes glow { 50% { opacity: .55; } }
+
+/* ===========================================
+   TITLE + CLOSING SLIDES (street scene)
+   =========================================== */
+.lot { position: absolute; right: -380px; top: 0; width: 1000px; height: 1080px; max-width: none; max-height: none; }
+.lot line { stroke: var(--paint); stroke-width: 10; stroke-linecap: square; opacity: .82; stroke-dasharray: 1400; stroke-dashoffset: 1400; }
+.slide.visible .lot line { animation: paint 1.1s cubic-bezier(.6,0,.2,1) forwards; }
+.lot .mine-glow { fill: url(#glow); opacity: 0; }
+.lot .stall-mine { font-weight: 900; font-size: 92px; fill: var(--amber); opacity: 0; }
+.lot .stall-num { font-weight: 900; font-size: 92px; fill: var(--paint); opacity: .16; }
+.slide.visible .lot .mine-glow { animation: up 1s 1.3s forwards; }
+.slide.visible .lot .stall-mine { animation: up .6s 1.4s forwards; }
+.sign { position: absolute; left: 1560px; top: 170px; width: 190px; opacity: 0; }
+.slide.visible .sign { animation: drop .8s 1.5s cubic-bezier(.3,1.4,.5,1) forwards; }
+.plate { width: 190px; height: 190px; background: var(--blue); border-radius: 30px; border: 8px solid var(--paint); display: grid; place-items: center; box-shadow: 0 30px 60px rgba(0,0,0,.5); }
+.plate svg { height: 128px; width: 100px; }
+.plate .lb { stroke: #fff; }
+.tab { margin: 10px auto 0; width: 190px; background: var(--paint); color: var(--asphalt); border-radius: 12px; text-align: center; font-family: var(--font-mono); font-weight: 700; font-size: 22px; padding: 10px 0 6px; }
+.pole { margin: 0 auto; width: 16px; height: 420px; background: linear-gradient(90deg, #8a8d94, #c9cbd0 50%, #6c6f75); }
+.curb { position: absolute; left: 0; right: 0; bottom: 0; height: 64px; background: var(--asphalt-3); border-top: 6px solid #3a3e46; }
+.curb::after { content: ''; position: absolute; left: 0; top: 18px; height: 22px; width: 100%; background: repeating-linear-gradient(90deg, var(--amber) 0 180px, transparent 180px 220px); transform-origin: left; }
+.slide.visible .curb::after { animation: grow 1.2s .3s cubic-bezier(.6,0,.2,1) both; }
+.hero { position: absolute; left: 100px; top: 320px; font-weight: 900; font-size: 200px; line-height: .86; letter-spacing: -.02em; text-transform: uppercase; }
+
+/* ===========================================
+   SLIDE-SPECIFIC PIECES
+   =========================================== */
+/* Problem: coping rows */
+.cope { position: absolute; left: 110px; width: 760px; display: flex; align-items: center; gap: 28px; padding: 18px 0; border-bottom: 3px dashed rgba(237,235,228,.18); }
+.cope .ic { width: 60px; height: 60px; color: var(--blue-lite); }
+.cope .lbl { font-size: 42px; font-weight: 800; }
+.cope .n { margin-left: auto; font-size: 64px; font-weight: 900; color: var(--amber); }
+
+/* Competition matrix */
+.mx { position: absolute; left: 200px; top: 420px; width: 960px; height: 560px; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 16px; }
+.q { border: 2px solid rgba(237,235,228,.22); border-radius: 14px; padding: 26px; display: flex; flex-direction: column; gap: 12px; }
+.q .mono { font-size: 20px; color: var(--muted); }
+.q .co { font-size: 30px; font-weight: 700; color: var(--paint-dim); }
+.q.us { border: 4px solid var(--amber); background: rgba(255,176,32,.07); align-items: center; justify-content: center; text-align: center; }
+.q.us svg { height: 96px; width: 300px; }
+.axis { position: absolute; font-family: var(--font-mono); font-size: 22px; letter-spacing: .16em; color: var(--paint); }
+/* Vertical axis labels: rotation lives on the inner span so the reveal animation can't override it */
+.axis.v { width: 40px; display: flex; align-items: center; justify-content: center; }
+.axis.v span { display: block; white-space: nowrap; transform: rotate(-90deg); }
+
+/* Experiment gauges */
+.gauge { position: absolute; top: 300px; width: 320px; text-align: center; }
+.gauge svg { width: 260px; height: 260px; }
+.gauge .bg { stroke: rgba(237,235,228,.12); }
+.gauge .arcp { stroke-dasharray: 628.3; transform: rotate(-90deg); transform-origin: 120px 120px; }
+.slide.visible .gauge .arcp { animation: arc 1.4s .5s var(--ease) both; }
+.gauge .pct { font-size: 64px; font-weight: 900; fill: var(--paint); font-family: var(--font-display); }
+.gauge .lbl { margin-top: 16px; font-size: 32px; font-weight: 800; line-height: 1.15; }
+.gauge .tgt { margin-top: 10px; font-family: var(--font-mono); font-size: 20px; letter-spacing: .1em; color: var(--muted); }
+.verdict { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 50%; margin-top: 14px; }
+.verdict .ic { width: 32px; height: 32px; stroke-width: 3; }
+.verdict.ok { background: var(--blue); color: #fff; } .verdict.no { background: var(--red); color: #fff; }
+
+/* Assumption ladder */
+.step-box { position: absolute; left: 110px; width: 600px; padding: 26px 30px; border-radius: 14px; display: flex; gap: 22px; align-items: center; }
+.step-box .t { font-size: 38px; font-weight: 900; text-transform: uppercase; line-height: 1; }
+.step-box .s { font-size: 26px; font-weight: 600; color: var(--paint-dim); margin-top: 8px; }
+
+/* Stat bays (learned) */
+.stat { display: flex; flex-direction: column; }
+.stat .big { font-size: 110px; color: var(--amber); }
+.stat .k { margin-top: 14px; font-size: 32px; }
+.stat .arrow { margin-top: auto; padding-bottom: 6px; font-size: 32px; font-weight: 800; color: var(--paint); display: flex; gap: 12px; align-items: center; }
+.stat .arrow .ic { width: 34px; height: 34px; color: var(--amber); stroke-width: 2.5; }
+
+/* Roles (MVP) */
+.role { position: absolute; left: 110px; display: flex; align-items: center; gap: 26px; }
+.role .ic { width: 64px; height: 64px; color: var(--blue-lite); }
+.role .t { font-size: 38px; font-weight: 900; text-transform: uppercase; }
+.role .s { font-size: 28px; font-weight: 600; color: var(--paint-dim); }
+
+/* Demo slide */
+.steps { position: absolute; left: 110px; top: 470px; width: 760px; }
+.dstep { display: flex; align-items: center; gap: 26px; height: 74px; font-size: 40px; font-weight: 800; color: rgba(237,235,228,.35); transition: color .3s; }
+.dstep .no { width: 58px; height: 58px; border: 4px solid currentColor; border-radius: 10px; display: grid; place-items: center; font-size: 28px; font-weight: 900; transition: background .3s, border-color .3s, color .3s; }
+.dstep.done { color: var(--paint-dim); }
+.dstep.on { color: var(--paint); }
+.dstep.on .no { background: var(--amber); border-color: var(--amber); color: var(--asphalt); }
+.phone { position: absolute; left: 1150px; top: 96px; width: 438px; height: 892px; border-radius: 64px; background: #0b0c0f; border: 4px solid #3a3e46; padding: 20px; box-shadow: 0 40px 100px rgba(0,0,0,.6), 0 0 0 10px #1a1c21; }
+.phone iframe { width: 390px; height: 844px; border: 0; border-radius: 44px; background: #f4f5f7; display: block; pointer-events: none; }
+.phone-glow { position: absolute; left: 1000px; top: 300px; width: 740px; height: 600px; background: radial-gradient(closest-side, rgba(255,176,32,.22), transparent); }
+.slide.visible .phone-glow { animation: glow 4s ease-in-out infinite; }
+.replay { position: absolute; left: 110px; top: 950px; background: none; border: 2px solid rgba(237,235,228,.3); color: var(--paint-dim); font-family: var(--font-mono); font-size: 20px; letter-spacing: .12em; padding: 10px 18px 6px; border-radius: 8px; cursor: pointer; }
+.replay:hover { border-color: var(--amber); color: var(--amber); }
+
+/* Pricing split bar */
+.split { position: absolute; left: 640px; top: 450px; width: 1170px; height: 150px; display: flex; border-radius: 14px; overflow: hidden; transform-origin: left; }
+.slide.visible .split { animation: grow 1.1s .4s var(--ease) both; }
+.split > div { display: flex; flex-direction: column; justify-content: center; padding: 0 34px; }
+.split .city { flex: 9; background: var(--blue); }
+.split .us { flex: 1.6; background: var(--amber); color: var(--asphalt); align-items: center; padding: 0; }
+.split .v { font-size: 64px; font-weight: 900; line-height: 1; }
+.split .l { font-family: var(--font-mono); font-size: 20px; letter-spacing: .12em; margin-top: 8px; text-transform: uppercase; }
+
+/* Go-to-market route */
+.road { position: absolute; left: 0; right: 0; top: 640px; height: 70px; background: var(--asphalt-3); }
+.road::after { content: ''; position: absolute; left: 0; right: 0; top: 32px; height: 6px; background: repeating-linear-gradient(90deg, var(--paint) 0 70px, transparent 70px 120px); opacity: .5; transform-origin: left; }
+.slide.visible .road::after { animation: grow 1.4s .2s var(--ease) both; }
+.stop { position: absolute; top: 600px; width: 520px; }
+.stop .pin { width: 150px; height: 150px; border-radius: 26px; background: var(--blue); border: 7px solid var(--paint); display: grid; place-items: center; font-size: 76px; font-weight: 900; color: #fff; box-shadow: 0 20px 40px rgba(0,0,0,.45); }
+.stop.first .pin { background: var(--amber); color: var(--asphalt); }
+.stop h3 { margin-top: 36px; font-size: 44px; font-weight: 900; text-transform: uppercase; line-height: 1; }
+.stop .k { margin-top: 16px; font-size: 32px; }
+
+/* What's next table */
+.nx { position: absolute; left: 110px; right: 110px; display: grid; grid-template-columns: 620px 440px 1fr; column-gap: 40px; align-items: center; }
+.nx.head { top: 440px; font-family: var(--font-mono); font-size: 22px; letter-spacing: .16em; color: var(--muted); }
+.nx.row { height: 160px; border-top: 3px dashed rgba(237,235,228,.2); }
+.nx .test { display: flex; align-items: center; gap: 24px; font-size: 38px; font-weight: 800; line-height: 1.1; }
+.nx .test .ic { width: 58px; height: 58px; color: var(--blue-lite); }
+.nx .kill { font-size: 34px; font-weight: 800; color: var(--red); display: flex; gap: 14px; align-items: center; }
+.nx .kill .ic { width: 40px; height: 40px; stroke-width: 2.4; }
+.nx .piv { font-size: 32px; font-weight: 900; color: var(--amber); display: flex; gap: 16px; align-items: center; text-transform: uppercase; line-height: 1.05; }
+.nx .piv .ic { width: 44px; height: 44px; stroke-width: 2.6; }
+
+/* ===========================================
+   PROGRESS BAR + EDIT MODE (outside the stage)
+   =========================================== */
+.progress { position: fixed; left: 0; bottom: 0; height: 4px; background: var(--amber); z-index: 1000; transition: width .4s var(--ease); }
+.edit-hotzone { position: fixed; top: 0; left: 0; width: 80px; height: 80px; z-index: 10000; cursor: pointer; }
+.edit-toggle { position: fixed; top: 16px; left: 16px; z-index: 10001; width: 44px; height: 44px; border-radius: 10px; border: 2px solid var(--amber); background: var(--asphalt); color: var(--amber); font-size: 20px; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity .3s ease; }
+.edit-toggle.show, .edit-toggle.active { opacity: 1; pointer-events: auto; }
+.edit-toggle.active { background: var(--amber); color: var(--asphalt); }
+body.editing [contenteditable="true"] { outline: 2px dashed rgba(255,176,32,.6); outline-offset: 4px; }
+</style>
+</head>
+<body>
+
+<!-- ===========================================
+     SVG SPRITE: logo + icons (referenced with <use>)
+     =========================================== -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="logo" viewBox="10.25 -4 224.3 72"><g transform="translate(-4 0)" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11V53" class="lb" stroke-width="7.5"/><circle cx="36" cy="25" r="14" class="lb" stroke-width="7.5"/><path d="M36 25V18M36 25L41 28" class="la" stroke-width="4.5"/></g><g transform="translate(63.75 8) scale(0.6)" fill="none" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"><g class="lk"><path d="M4 24V76"/><circle cx="20" cy="40" r="16"/><circle cx="66" cy="40" r="16"/><path d="M82 24V56"/><path d="M96 24V56M96 40A16 16 0 0 1 112 24H116"/><path d="M126 4V56M150 24L130 42M137 36L152 56"/></g><g class="lb"><circle cx="182" cy="40" r="16"/><path d="M212 24V56M212 40A16 16 0 0 1 228 24H232"/><circle cx="258" cy="40" r="16"/><path d="M274 24V56"/></g></g></symbol>
+    <symbol id="logo-icon" viewBox="12 5 40 54"><g transform="translate(-4 0)" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11V53" class="lb" stroke-width="7.5"/><circle cx="36" cy="25" r="14" class="lb" stroke-width="7.5"/><path d="M36 25V18M36 25L41 28" class="la" stroke-width="4.5"/></g></symbol>
+    <symbol id="i-car" viewBox="0 0 24 24"><path d="M3 17v-4.5l2.2-5A2 2 0 0 1 7 6.3h10a2 2 0 0 1 1.8 1.2l2.2 5V17"/><path d="M3 12.5h18M5 17h1.5M17.5 17H19M9.5 17h5"/><circle cx="7.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/></symbol>
+    <symbol id="i-loop" viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1L20.5 8.5"/><path d="M20.5 3.5v5h-5"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></symbol>
+    <symbol id="i-walk" viewBox="0 0 24 24"><circle cx="13.5" cy="4" r="1.8"/><path d="M8 21l2.5-6.5L13 17v4M7 11.5l3-3.5 3.5 1 2.5 3.5 2.5.5M10.5 14.5l1.5-5.5"/></symbol>
+    <symbol id="i-building" viewBox="0 0 24 24"><path d="M3 21h18M5 21V10M19 21V10M9.5 21v-7M14.5 21v-7M2.5 10L12 4l9.5 6z"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M11 18.5h2"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M5 20V11M11 20V5M17 20v-7M22 20H2"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="11" width="15" height="10" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5l9.5 17h-19z"/><path d="M12 10v4.5M12 17.5h.01"/></symbol>
+    <symbol id="i-qr" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-4M14 21v-3"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 0 1-12.3 7.6L3.5 21l1.4-4.6A8.5 8.5 0 1 1 20.5 12z"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+    <symbol id="i-sign" viewBox="0 0 24 24"><path d="M12 3v18M5 6h12l3 3-3 3H5z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16M14 6l6 6-6 6"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></symbol>
+    <symbol id="i-refund" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 3.5v5h5"/><path d="M12 8v8"/></symbol>
+    <symbol id="i-page" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 13h6M7 16h10"/></symbol>
+    <radialGradient id="glow"><stop offset="0" stop-color="#FFB020" stop-opacity=".35"/><stop offset="1" stop-color="#FFB020" stop-opacity="0"/></radialGradient>
+    <filter id="n"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .55 0"/></filter>
+  </defs>
+</svg>
+
+<div class="deck-viewport">
+<main class="deck-stage" id="deckStage">
+
+<!-- ===========================================
+     01 · TITLE
+     =========================================== -->
+<section class="slide" data-label="Title">
+  <svg class="lot" viewBox="0 0 1000 1080" aria-hidden="true">
+    <ellipse class="mine-glow" cx="330" cy="760" rx="260" ry="200"/>
+    <line x1="80" y1="1016" x2="300" y2="40" style="animation-delay:.2s"/>
+    <line x1="290" y1="1016" x2="510" y2="40" style="animation-delay:.32s"/>
+    <line x1="500" y1="1016" x2="720" y2="40" style="animation-delay:.44s"/>
+    <line x1="710" y1="1016" x2="930" y2="40" style="animation-delay:.56s"/>
+    <text class="stall-mine" x="300" y="985" transform="rotate(-12 300 985)">11</text>
+    <text class="stall-num" x="510" y="985" transform="rotate(-12 510 985)">12</text>
+  </svg>
+  <div class="sign"><div class="plate"><svg><use href="#logo-icon"/></svg></div><div class="tab">11:00 – 13:00</div><div class="pole"></div></div>
+  <svg class="abs reveal" style="left:110px;top:86px;width:180px;height:52px;--d:0"><use href="#logo"/></svg>
+  <div class="chip amber abs reveal" style="left:110px;top:236px;--d:1">No. 11 · Calle Bolívar · Reserved for you</div>
+  <h1 class="hero reveal" style="--d:2">Your spot.<br><span class="blue">Your hour.</span></h1>
+  <p class="abs k reveal" style="left:110px;top:730px;width:1100px;font-size:40px;--d:4">Reserve a <b>city street spot</b> before you leave home.</p>
+  <div class="abs mono reveal" style="left:110px;bottom:104px;font-size:20px;color:var(--muted);--d:5">On-street parking reservations · 2026</div>
+  <div class="curb"></div>
+</section>
+
+<!-- ===========================================
+     02 · THE PROBLEM
+     =========================================== -->
+<section class="slide" data-label="Problem">
+  <header class="chrome"><svg class="logo"><use href="#logo"/></svg><span class="sec">01 · The problem</span><span class="pg">02 / 12</span></header>
+  <h2 class="title reveal" style="--d:0">Circling.<br>Hoping.<br><span class="amber">Giving up.</span></h2>
+
+  <div class="abs mono reveal" style="left:110px;top:520px;font-size:22px;color:var(--muted);--d:2">How drivers cope today · survey</div>
+  <div class="cope reveal reveal-l" style="top:560px;--d:3"><svg class="ic"><use href="#i-loop"/></svg><span class="lbl">Circle the block</span><span class="n">6/7</span></div>
+  <div class="cope reveal reveal-l" style="top:680px;--d:4"><svg class="ic"><use href="#i-clock"/></svg><span class="lbl">Leave earlier</span><span class="n">5/7</span></div>
+  <div class="cope reveal reveal-l" style="top:800px;--d:5"><svg class="ic"><use href="#i-walk"/></svg><span class="lbl">Park far &amp; walk</span><span class="n">5/7</span></div>
+
+  <!-- A full city block with a car circling it -->
+  <svg class="abs reveal" style="left:980px;top:150px;width:840px;height:470px;--d:1" viewBox="0 0 820 460" aria-hidden="true">
+    <path id="roadPath" d="M180 30 H640 A60 60 0 0 1 700 90 V370 A60 60 0 0 1 640 430 H180 A60 60 0 0 1 120 370 V90 A60 60 0 0 1 180 30 Z" fill="none" stroke="#2A2D34" stroke-width="58"/>
+    <path d="M180 30 H640 A60 60 0 0 1 700 90 V370 A60 60 0 0 1 640 430 H180 A60 60 0 0 1 120 370 V90 A60 60 0 0 1 180 30 Z" fill="none" stroke="#EDEBE4" stroke-opacity=".35" stroke-width="3" stroke-dasharray="18 16"/>
+    <rect x="175" y="85" width="470" height="290" rx="14" fill="#1A1C22" stroke="#3a3e46" stroke-width="3"/>
+    <g fill="#4a4e57">
+      <rect x="200" y="96" width="44" height="22" rx="5"/><rect x="256" y="96" width="44" height="22" rx="5"/><rect x="312" y="96" width="44" height="22" rx="5"/><rect x="368" y="96" width="44" height="22" rx="5"/><rect x="424" y="96" width="44" height="22" rx="5"/><rect x="480" y="96" width="44" height="22" rx="5"/><rect x="536" y="96" width="44" height="22" rx="5"/><rect x="592" y="96" width="40" height="22" rx="5"/>
+      <rect x="200" y="342" width="44" height="22" rx="5"/><rect x="256" y="342" width="44" height="22" rx="5"/><rect x="312" y="342" width="44" height="22" rx="5"/><rect x="368" y="342" width="44" height="22" rx="5"/><rect x="424" y="342" width="44" height="22" rx="5"/><rect x="480" y="342" width="44" height="22" rx="5"/><rect x="536" y="342" width="44" height="22" rx="5"/><rect x="592" y="342" width="40" height="22" rx="5"/>
+    </g>
+    <text x="410" y="246" text-anchor="middle" font-family="Overpass Mono" font-weight="700" font-size="30" fill="#FF5A4E" letter-spacing="4">FULL</text>
+    <g>
+      <rect x="-26" y="-14" width="52" height="28" rx="8" fill="#7C97FF"/><rect x="6" y="-10" width="12" height="20" rx="3" fill="#14161B" opacity=".55"/>
+      <circle cx="26" cy="-9" r="3.5" fill="#FFB020"/><circle cx="26" cy="9" r="3.5" fill="#FFB020"/>
+      <animateMotion dur="5s" repeatCount="indefinite" rotate="auto"><mpath href="#roadPath"/></animateMotion>
+    </g>
+  </svg>
+  <div class="abs big amber reveal reveal-s" style="left:990px;top:680px;font-size:220px;--d:6">2/7</div>
+  <div class="abs reveal" style="left:1440px;top:705px;width:370px;--d:7"><div style="font-size:46px;font-weight:900;line-height:1;text-transform:uppercase">Found no spot</div><div class="k" style="margin-top:10px">and left</div></div>
+  <div class="chips abs reveal" style="left:990px;top:920px;--d:8"><span class="chip">+ Traffic</span><span class="chip">+ Stress</span><span class="chip">Car watchers ≠ a spot</span></div>
+  <div class="lane"></div>
+</section>
+
+<!-- ===========================================
+     03 · WHO IT'S FOR
+     =========================================== -->
+<section class="slide" data-label="Who">
+  <header class="chrome"><svg class="logo"><use href="#logo"/></svg><span class="sec">02 · Who it's for</span><span class="pg">03 / 12</span></header>
+  <h2 class="title reveal" style="--d:0">Two customers.</h2>
+
+  <div class="bay reveal" style="left:110px;top:330px;width:790px;height:600px;--d:1">
+    <div style="display:flex;align-items:center;gap:24px"><svg class="ic blue" style="width:96px;height:96px"><use href="#i-car"/></svg><span class="chip blue">Uses it · pays per reservation</span></div>
+    <div style="font-size:66px;font-weight:900;text-transform:uppercase;margin-top:30px">Driver</div>
+    <div class="k" style="margin-top:22px;line-height:1.55"><b>Private car</b><br>≥ 1× / week to hard areas<br>Stays <b>1–4 h</b><br>Downtown <span class="sep">·</span> markets <span class="sep">·</span> hospitals</div>
+    <span class="num">A</span>
+  </div>
+  <div class="bay amber reveal" style="left:1020px;top:330px;width:790px;height:600px;--d:2">
+    <div style="display:flex;align-items:center;gap:24px"><svg class="ic amber" style="width:96px;height:96px"><use href="#i-building"/></svg><span class="chip amber">Approves &amp; pays · B2G</span></div>
+    <div style="font-size:66px;font-weight:900;text-transform:uppercase;margin-top:30px;white-space:nowrap">City government</div>
+    <div class="k" style="margin-top:22px;line-height:1.55"><b>Owns the street</b><br>Sets rates <span class="sep">·</span> zones <span class="sep">·</span> fines<br>Wants less traffic &amp; order<br>Gets prepaid revenue + data</div>
+    <span class="num">B</span>
+  </div>
+  <div class="abs mono reveal" style="left:110px;top:965px;font-size:22px;color:var(--muted);--d:4">Out: taxis &amp; quick stops → casual zones, no reservation</div>
+</section>
+
+<!-- ===========================================
+     04 · COMPETITION
+     =========================================== -->
+<section class="slide" data-label="Competition">
+  <header class="chrome"><svg class="logo"><use href="#logo"/></svg><span class="sec">03 · Competition</span><span class="pg">04 / 12</span></header>
+  <h2 class="title reveal" style="font-size:100px;--d:0">Nobody reserves<br>the <span class="amber">street.</span></h2>
+
+  <div class="axis reveal" style="left:200px;top:378px;width:472px;text-align:center;--d:1">PAY</div>
+  <div class="axis reveal" style="left:688px;top:378px;width:472px;text-align:center;--d:1">RESERVE</div>
+  <div class="axis v reveal" style="left:136px;top:420px;height:272px;--d:1"><span>ON-STREET</span></div>
+  <div class="axis v reveal" style="left:136px;top:708px;height:272px;--d:1"><span>GARAGES · LOTS</span></div>
+  <div class="mx">
+    <div class="q reveal" style="--d:2"><span class="co">Innova <span class="sep">·</span> Mis Cuentas</span><span class="co">PayByPhone <span class="sep">·</span> EasyPark</span><span class="co">Blinkay <span class="sep">·</span> ZPP Bogotá</span><span class="mono" style="margin-top:auto">Pay once you've found a spot</span></div>
+    <div class="q us reveal reveal-s" style="--d:5"><svg><use href="#logo"/></svg><span class="mono amber" style="font-size:22px">Only one here</span></div>
+    <div class="q reveal" style="--d:3"><span class="co">Private lots <span class="sep">·</span> cash</span><span class="co">Car watchers <span class="sep">·</span> tip</span><span class="mono" style="margin-top:auto">Pricier, or no guarantee</span></div>
+    <div class="q reveal" style="--d:4"><span class="co">SpotHero <span class="sep">·</span> ParkWhiz</span><span class="co">JustPark <span class="sep">·</span> ParkMobile</span><span class="co">Estacionate <span class="sep">·</span> YaLlegOK</span><span class="mono" style="margin-top:auto">Private lots &amp; garages only</span></div>
+  </div>
+
+  <div class="abs reveal" style="left:1260px;top:380px;width:560px;--d:6">
+    <div class="mono amber" style="font-size:22px">Why Parkora</div>
+    <div style="display:flex;gap:22px;margin-top:30px"><svg class="ic blue"><use href="#i-car"/></svg><div class="k"><b>Lot certainty</b><br>at street price<br>before leaving home</div></div>
+    <div style="display:flex;gap:22px;margin-top:40px"><svg class="ic amber"><use href="#i-building"/></svg><div class="k"><b>Prepaid + data</b><br>City keeps control<br>of rates &amp; zones</div></div>
+  </div>
+  <div class="abs reveal" style="left:1260px;top:830px;width:550px;--d:7">
+    <div class="chip" style="white-space:normal;line-height:1.35">Curb reservations exist only for delivery loading zones</div>
+  </div>
+  <div class="lane"></div>
+</section>
+
+<!-- ===========================================
+     05 · THE EXPERIMENT
+     =========================================== -->
+<section class="slide" data-label="Experiment">
+  <header class="chrome"><svg class="logo"><use href="#logo"/></svg><span class="sec">04 · The experiment</span><span class="pg">05 / 12</span></header>
+  <h2 class="title reveal" style="font-size:100px;--d:0">Test drivers <span class="amber">first.</span></h2>
+
+  <div class="step-box reveal reveal-l" style="top:300px;border:3px dashed rgba(237,235,228,.3);--d:1">
+    <svg class="ic dim" style="width:64px;height:64px"><use href="#i-lock"/></svg>
+    <div><div class="t dim">#1 <span class="sep">·</span> City wants it</div><div class="s">Biggest risk <span class="sep">·</span> can't test in a week</div></div>
+  </div>
+  <svg class="abs reveal" style="left:380px;top:440px;width:60px;height:70px;color:var(--amber);--d:2" viewBox="0 0 24 28" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 2v22M5 17l7 7 7-7"/></svg>
+  <div class="step-box reveal reveal-l" style="top:520px;border:4px solid var(--amber);background:rgba(255,176,32,.07);--d:3">
+    <svg class="ic amber" style="width:64px;height:64px"><use href="#i-car"/></svg>
+    <div><div class="t">#2–4 <span class="sep">·</span> Drivers</div><div class="s">Pain? <span class="sep">·</span> Plan ahead? <span class="sep">·</span> Pay?</div></div>
+  </div>
+  <div class="chips abs reveal" style="left:110px;top:706px;width:620px;gap:12px;--d:4"><span class="chip">Online survey</span><span class="chip">WhatsApp</span><span class="chip">Cochabamba</span><span class="chip amber">Criteria set before</span><span class="chip amber">n = 7</span></div>
+
+  <!-- Gauges: r=100 → circumference 628.3; dashoffset = 628.3 × (1 − pct) -->
+  <div class="gauge reveal" style="left:780px;--d:5">
+    <svg viewBox="0 0 240 240"><circle class="bg" cx="120" cy="120" r="100" fill="none" stroke-width="22"/><circle class="arcp" cx="120" cy="120" r="100" fill="none" stroke="#FF5A4E" stroke-width="22" stroke-linecap="round" style="stroke-dashoffset:358.1"/><g transform="rotate(216 120 120)"><line x1="120" y1="4" x2="120" y2="36" stroke="#FFB020" stroke-width="6"/></g><text class="pct" x="120" y="142" text-anchor="middle">43%</text></svg>
+    <div class="lbl">Lose ≥ 10 min<br>every week</div><div class="tgt">Target ≥ 60%</div><div class="verdict no"><svg class="ic"><use href="#i-x"/></svg></div>
+  </div>
+  <div class="gauge reveal" style="left:1130px;--d:6">
+    <svg viewBox="0 0 240 240"><circle class="bg" cx="120" cy="120" r="100" fill="none" stroke-width="22"/><circle class="arcp" cx="120" cy="120" r="100" fill="none" stroke="#7C97FF" stroke-width="22" stroke-linecap="round" style="stroke-dashoffset:88"/><g transform="rotate(180 120 120)"><line x1="120" y1="4" x2="120" y2="36" stroke="#FFB020" stroke-width="6"/></g><text class="pct" x="120" y="142" text-anchor="middle">86%</text></svg>
+    <div class="lbl">Know times<br>≥ 30 min ahead</div><div class="tgt">Target ≥ 50%</div><div class="verdict ok"><svg class="ic"><use href="#i-check"/></svg></div>
+  </div>
+  <div class="gauge reveal" style="left:1480px;--d:7">
+    <svg viewBox="0 0 240 240"><circle class="bg" cx="120" cy="120" r="100" fill="none" stroke-width="22"/><circle class="arcp" cx="120" cy="120" r="100" fill="none" stroke="#7C97FF" stroke-width="22" stroke-linecap="round" style="stroke-dashoffset:88"/><g transform="rotate(144 120 120)"><line x1="120" y1="4" x2="120" y2="36" stroke="#FFB020" stroke-width="6"/></g><text class="pct" x="120" y="142" text-anchor="middle">86%</text></svg>
+    <div class="lbl">Pay same<br>or more</div><div class="tgt">Target ≥ 40%</div><div class="verdict ok"><svg class="ic"><use href="#i-check"/></svg></div>
+  </div>
+
+  <div class="abs reveal" style="left:110px;top:860px;width:1700px;height:120px;border:3px solid var(--amber);border-radius:14px;display:flex;align-items:center;gap:30px;padding:0 36px;--d:9">
+    <svg class="ic amber" style="width:60px;height:60px"><use href="#i-alert"/></svg>
+    <span class="big amber" style="font-size:64px">0/7</span>
+    <span style="font-size:38px;font-weight:800">left their WhatsApp</span>
+    <span class="mono" style="margin-left:auto;font-size:22px;color:var(--paint-dim)">Stated ≠ committed · signal, not proof</span>
+  </div>
+</section>
+
+<!-- ===========================================
+     06 · WHAT I LEARNED
+     =========================================== -->
+<section class="slide" data-label="Learned">
+  <header class="chrome"><svg class="logo"><use href="#logo"/></svg><span class="sec">05 · What I learned</span><span class="pg">06 / 12</span></header>
+  <h2 class="title reveal" style="font-size:132px;--d:0">Certainty<br><span class="amber">&gt;</span> minutes</h2>
+  <blockquote class="abs reveal" style="left:1060px;top:170px;width:750px;border-left:8px solid var(--amber);padding-left:36px;--d:1">
+    <p style="font-size:44px;font-weight:800;font-style:italic;line-height:1.2">“Quite a bit more, if it really guarantees me the spot.”</p>
+    <p class="mono" style="margin-top:20px;font-size:20px;color:var(--muted)">Survey respondent · translated</p>
+  </blockquote>
+
+  <div class="bay stat reveal" style="left:110px;top:470px;width:540px;height:330px;padding:34px 40px;--d:3">
+    <div class="big">4/6</div><div class="k">fear their spot won't be respected</div>
+    <div class="arrow"><svg class="ic"><use href="#i-arrow"/></svg>Enforcement = core</div>
+  </div>
+  <div class="bay stat reveal" style="left:690px;top:470px;width:540px;height:330px;padding:34px 40px;--d:4">
+    <div class="big">1–4 h</div><div class="k">typical stay, not the 1 h we assumed</div>
+    <div class="arrow"><svg class="ic"><use href="#i-arrow"/></svg>Revenue recalculated</div>
+  </div>
+  <div class="bay stat reveal" style="left:1270px;top:470px;width:540px;height:330px;padding:34px 40px;--d:5">
+    <div class="big">29%</div><div class="k">of mentions point to Centro, the #1 area</div>
+    <div class="arrow"><svg class="ic"><use href="#i-arrow"/></svg>MVP: Centro only</div>
+  </div>
+
+  <div class="abs reveal" style="left:110px;top:850px;display:flex;align-items:center;gap:30px;--d:7">
+    <span style="font-size:44px;font-weight:900;text-transform:uppercase;color:var(--muted);text-decoration:line-through;text-decoration-color:var(--red);text-decoration-thickness:6px">Save time</span>
+    <svg class="ic amber" style="width:52px;height:52px;stroke-width:2.6"><use href="#i-arrow"/></svg>
+    <span style="font-size:44px;font-weight:900;text-transform:uppercase">Arrive with your spot <span class="amber">guaranteed</span></span>
+  </div>
+  <div class="chips abs reveal" style="left:110px;top:950px;align-items:center;--d:8"><span class="mono" style="font-size:20px;color:var(--muted);margin-right:6px">Still assuming:</span><span class="chip">City buys in</span><span class="chip">Say → pay</span><span class="chip">Beyond my circle</span><span class="chip">Fines deter</span></div>
+</section>
+
+<!-- ===========================================
+     07 · THE MVP
+     =========================================== -->
+<section class="slide" data-label="MVP">
+  <header class="chrome"><svg class="logo"><use href="#logo"/></svg><span class="sec">06 · Smallest useful version</span><span class="pg">07 / 12</span></header>
+  <h2 class="title reveal" style="font-size:104px;--d:0">3 blocks.<br>30 spots.<br><span class="amber">One pilot.</span></h2>
+
+  <div class="role reveal reveal-l" style="top:500px;--d:2"><svg class="ic"><use href="#i-phone"/></svg><div><div class="t">Driver</div><div class="s">Find <span class="sep">·</span> reserve <span class="sep">·</span> pay by QR</div></div></div>
+  <div class="role reveal reveal-l" style="top:615px;--d:3"><svg class="ic"><use href="#i-shield"/></svg><div><div class="t">Attendant</div><div class="s">Check plate <span class="sep">·</span> fine</div></div></div>
+  <div class="role reveal reveal-l" style="top:730px;--d:4"><svg class="ic"><use href="#i-chart"/></svg><div><div class="t">City</div><div class="s">Live dashboard</div></div></div>
+  <div class="chips abs reveal" style="left:110px;top:860px;width:760px;--d:5"><span class="chip">Web app · no install</span><span class="chip">No sensors</span><span class="chip amber">Centro · Cochabamba</span></div>
+
+  <!-- Pilot map: dots are generated by script (see PILOT MAP below) -->
+  <svg id="pilotMap" class="abs reveal" style="left:900px;top:150px;width:910px;height:550px;--d:1" viewBox="0 0 930 560" aria-hidden="true">
+    <rect x="20" y="70" width="210" height="440" rx="12" fill="#1C3326"/>
+    <text x="125" y="290" text-anchor="middle" font-family="Overpass Mono" font-size="18" fill="#6FBF8E" letter-spacing="3" transform="rotate(-90 125 290)">PLAZA 14 DE SEPTIEMBRE</text>
+    <rect x="250" y="70" width="680" height="70" fill="#2A2D34"/>
+    <rect x="830" y="70" width="70" height="440" fill="#2A2D34"/>
+    <rect x="250" y="440" width="680" height="70" fill="#2A2D34"/>
+    <rect x="250" y="160" width="560" height="260" rx="10" fill="#1A1C22" stroke="#3a3e46" stroke-width="2"/>
+    <path d="M250 105H930M865 70V510M250 475H930" stroke="#EDEBE4" stroke-opacity=".3" stroke-width="3" stroke-dasharray="16 14" fill="none"/>
+    <text x="270" y="52" font-family="Overpass Mono" font-size="18" fill="#8E919A" letter-spacing="3">CALLE BOLÍVAR</text>
+    <text x="270" y="542" font-family="Overpass Mono" font-size="18" fill="#8E919A" letter-spacing="3">CALLE SUCRE</text>
+    <text x="915" y="290" text-anchor="middle" font-family="Overpass Mono" font-size="18" fill="#8E919A" letter-spacing="3" transform="rotate(90 915 290)">25 DE MAYO</text>
+    <g id="dots"></g>
+  </svg>
+  <div class="chips abs reveal" style="left:960px;top:720px;gap:28px;--d:3">
+    <span class="mono" style="font-size:20px;color:var(--paint-dim)"><span style="color:var(--green)">●</span> Free</span>
+    <span class="mono" style="font-size:20px;color:var(--paint-dim)"><span style="color:#6B6F78">●</span> Reserved</span>
+    <span class="mono" style="font-size:20px;color:var(--paint-dim)"><span style="color:var(--blue-lite)">●</span> Casual</span>
+    <span class="mono" style="font-size:20px;color:var(--paint-dim)"><span style="color:var(--amber)">●</span> Yours</span>
+  </div>
+
+  <div class="abs reveal" style="left:960px;top:800px;width:850px;display:flex;gap:24px;align-items:stretch;--d:6">
+    <div style="flex:1;border:3px solid rgba(237,235,228,.3);border-radius:14px;padding:22px 26px">
+      <div class="mono" style="font-size:20px;color:var(--muted)">① Before the city</div>
+      <div style="font-size:32px;font-weight:900;margin-top:8px">LANDING PAGE</div>
+      <div class="k" style="font-size:26px">≥ 10% sign up</div>
+    </div>
+    <div style="flex:1.3;border:3px solid var(--amber);border-radius:14px;padding:22px 26px">
+      <div class="mono amber" style="font-size:20px">② Pilot · 4–8 weeks</div>
+      <div style="font-size:32px;font-weight:900;margin-top:8px">≥ 90% RESPECTED</div>
+      <div class="k" style="font-size:26px">≥ 30% reserve again</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===========================================
+     08 · LIVE DEMO
+     The phone embeds the real app (../web/index.html?demo=1). The app's
+     demo mode drives itself and posts each step back to this slide.
+     =========================================== -->
+<section class="slide" data-label="Demo" id="demoSlide">
+  <header class="chrome"><svg class="logo"><use href="#logo"/></svg><span class="sec">07 · Live demo</span><span class="pg">08 / 12</span></header>
+  <h2 class="title reveal" style="font-size:132px;--d:0">See it<br><span class="amber">work.</span></h2>
+  <div class="steps reveal" style="--d:1">
+    <div class="dstep" data-step="find"><span class="no">1</span>Find a free spot</div>
+    <div class="dstep" data-step="window"><span class="no">2</span>Pick your hours</div>
+    <div class="dstep" data-step="pay"><span class="no">3</span>Pay by QR</div>
+    <div class="dstep" data-step="confirmed"><span class="no">4</span>Spot reserved</div>
+    <div class="dstep" data-step="attendant"><span class="no">5</span>Attendant updates spots</div>
+    <div class="dstep" data-step="city"><span class="no">6</span>City dashboard</div>
+  </div>
+  <button class="replay" id="replay" type="button">↻ Replay</button>
+  <div class="phone-glow"></div>
+  <div class="phone reveal reveal-s" style="--d:1"><iframe id="demoFrame" title="Parkora app demo" tabindex="-1" src="about:blank"></iframe></div>
+  <svg class="abs" style="left:1660px;top:0;width:260px;height:1080px" viewBox="0 0 260 1080" aria-hidden="true"><path d="M60 1080L200 0" stroke="#EDEBE4" stroke-opacity=".25" stroke-width="10"/></svg>
+</section>
+
+<!-- ===========================================
+     09 · PRICING
+     =========================================== -->
+<section class="slide" data-label="Pricing">
+  <header class="chrome"><svg class="logo"><use href="#logo"/></svg><span class="sec">08 · Pricing</span><span class="pg">09 / 12</span></header>
+  <h2 class="title reveal" style="font-size:96px;--d:0">City sets the rate.<br>We take <span class="amber">10%.</span></h2>
+
+  <div class="abs reveal reveal-l" style="left:110px;top:450px;width:470px;height:150px;border:3px solid rgba(237,235,228,.3);border-radius:14px;display:flex;align-items:center;gap:24px;padding:0 30px;--d:1">
+    <svg class="ic blue" style="width:72px;height:72px"><use href="#i-car"/></svg>
+    <div><div style="font-size:36px;font-weight:900;text-transform:uppercase;line-height:1">Driver pays</div><div class="k" style="font-size:26px">per reservation <span class="sep">·</span> QR</div></div>
+  </div>
+  <svg class="abs reveal" style="left:582px;top:500px;width:56px;height:50px;color:var(--amber);--d:2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><use href="#i-arrow"/></svg>
+  <div class="split">
+    <div class="city"><div class="v">90%</div><div class="l">City government</div></div>
+    <div class="us"><div class="v">10%</div><div class="l">Parkora</div></div>
+  </div>
+  <div class="chip abs reveal" style="left:640px;top:630px;--d:5">+ ~US$10K setup per city · one-time</div>
+
+  <div class="abs reveal reveal-s" style="left:110px;top:730px;display:flex;align-items:flex-end;gap:28px;--d:6">
+    <div class="big amber" style="font-size:170px">~$7.6K</div>
+    <div style="font-size:36px;font-weight:900;text-transform:uppercase;line-height:1.1;padding-bottom:34px">/ month<br>/ city</div>
+  </div>
+  <div class="abs mono reveal" style="left:110px;top:940px;width:960px;font-size:20px;line-height:1.5;color:var(--muted);--d:7">2,000 spots × 8 h × 75% × Bs 2/h<br>Cochabamba example</div>
+
+  <div class="bay amber reveal" style="left:1170px;top:720px;width:640px;height:280px;padding:34px 40px;--d:8">
+    <div class="mono amber" style="font-size:20px">Spot taken?</div>
+    <div style="display:flex;align-items:center;gap:18px;margin-top:16px"><svg class="ic" style="width:48px;height:48px;color:var(--paint)"><use href="#i-refund"/></svg><span style="font-size:36px;font-weight:900">100% REFUND, INSTANTLY</span></div>
+    <div class="k" style="font-size:28px;margin-top:18px">Fine Bs 150 → <b>Bs 120</b> city <span class="sep">·</span> <b>Bs 30</b> you</div>
+    <div class="mono" style="font-size:18px;color:var(--muted);margin-top:22px">Fines = side effect, not revenue</div>
+  </div>
+  <div class="lane"></div>
+</section>
+
+<!-- ===========================================
+     10 · FIRST CUSTOMERS
+     =========================================== -->
+<section class="slide" data-label="Go-to-market">
+  <header class="chrome"><svg class="logo"><use href="#logo"/></svg><span class="sec">09 · First customers</span><span class="pg">10 / 12</span></header>
+  <h2 class="title reveal" style="font-size:104px;--d:0">First customer:<br><span class="blue">the city.</span></h2>
+  <div class="road"></div>
+  <div class="stop first reveal" style="left:110px;--d:2"><div class="pin">1</div><h3>City hall</h3><div class="k">Cochabamba pilot: 2–3 blocks<br><b>Less circling <span class="sep">·</span> prepaid <span class="sep">·</span> data</b></div></div>
+  <div class="stop reveal" style="left:700px;--d:4"><div class="pin">2</div><h3>Drivers</h3><div class="k">Street signage <span class="sep">·</span> city app<br>Attendants <span class="sep">·</span> WhatsApp groups</div></div>
+  <div class="stop reveal" style="left:1290px;--d:6"><div class="pin"><svg class="ic" style="width:78px;height:78px;color:#fff"><use href="#i-globe"/></svg></div><h3>More cities</h3><div class="k">Pilot = case study<br>La Paz <span class="sep">·</span> Santa Cruz → <b>LatAm</b></div></div>
+</section>
+
+<!-- ===========================================
+     11 · WHAT'S NEXT
+     =========================================== -->
+<section class="slide" data-label="Next">
+  <header class="chrome"><svg class="logo"><use href="#logo"/></svg><span class="sec">10 · What's next</span><span class="pg">11 / 12</span></header>
+  <h2 class="title reveal" style="font-size:100px;--d:0">What would<br>change <span class="amber">direction.</span></h2>
+  <div class="nx head reveal" style="--d:1"><span>NEXT TEST</span><span>IF THIS HAPPENS</span><span>PIVOT TO</span></div>
+  <div class="nx row reveal" style="top:490px;--d:2">
+    <div class="test"><svg class="ic"><use href="#i-building"/></svg>Meeting with city hall</div>
+    <div class="kill"><svg class="ic"><use href="#i-x"/></svg>No pilot <span class="sep">·</span> not legal</div>
+    <div class="piv"><svg class="ic"><use href="#i-arrow"/></svg>Private garages &amp; lots</div>
+  </div>
+  <div class="nx row reveal" style="top:650px;--d:3">
+    <div class="test"><svg class="ic"><use href="#i-page"/></svg>Landing page sign-up</div>
+    <div class="kill"><svg class="ic"><use href="#i-x"/></svg>&lt; 10% sign up</div>
+    <div class="piv"><svg class="ic"><use href="#i-arrow"/></svg>Real-time availability only</div>
+  </div>
+  <div class="nx row reveal" style="top:810px;--d:4">
+    <div class="test"><svg class="ic"><use href="#i-users"/></svg>Survey, 30+ outside my circle</div>
+    <div class="kill"><svg class="ic"><use href="#i-x"/></svg>&lt; 60% lose ≥ 10 min</div>
+    <div class="piv"><svg class="ic"><use href="#i-arrow"/></svg>Peak areas &amp; hours only</div>
+  </div>
+</section>
+
+<!-- ===========================================
+     12 · CLOSING
+     =========================================== -->
+<section class="slide" data-label="Closing">
+  <svg class="lot" viewBox="0 0 1000 1080" aria-hidden="true">
+    <ellipse class="mine-glow" cx="330" cy="760" rx="260" ry="200"/>
+    <line x1="80" y1="1016" x2="300" y2="40" style="animation-delay:.2s"/>
+    <line x1="290" y1="1016" x2="510" y2="40" style="animation-delay:.32s"/>
+    <line x1="500" y1="1016" x2="720" y2="40" style="animation-delay:.44s"/>
+    <line x1="710" y1="1016" x2="930" y2="40" style="animation-delay:.56s"/>
+    <text class="stall-mine" x="300" y="985" transform="rotate(-12 300 985)">11</text>
+  </svg>
+  <div class="sign"><div class="plate"><svg><use href="#logo-icon"/></svg></div><div class="tab">Reserved</div><div class="pole"></div></div>
+  <svg class="abs reveal" style="left:104px;top:200px;width:620px;height:200px;--d:0"><use href="#logo"/></svg>
+  <h1 class="hero reveal" style="top:470px;font-size:150px;--d:2">Your spot.<br><span class="blue">Your hour.</span></h1>
+  <div class="abs mono reveal" style="left:110px;top:800px;font-size:26px;color:var(--amber);--d:4">Thank you</div>
+  <div class="curb"></div>
+</section>
+
+<!-- Grain overlay over every slide -->
+<svg class="grain" width="1920" height="1080" aria-hidden="true"><rect width="100%" height="100%" filter="url(#n)"/></svg>
+</main>
+</div>
+
+<div class="progress" id="progress"></div>
+<div class="edit-hotzone"></div>
+<button class="edit-toggle" id="editToggle" title="Edit mode (E)">✎</button>
+
+<script>
+/* ===========================================
+   PILOT MAP: 30 spots on 3 streets (status mirrors the app's demo data)
+   f = free, r = reserved, c = casual, y = yours
+   =========================================== */
+(function () {
+  var g = document.getElementById('dots'), ns = 'http://www.w3.org/2000/svg';
+  var color = { f: '#3DDC84', r: '#6B6F78', c: '#7C97FF', y: '#FFB020' };
+  var rows = [
+    { s: 'frffrfffrc', at: function (i) { return [300 + i * 52, 152]; } },
+    { s: 'yfrfffrffc', at: function (i) { return [818, 180 + i * 26]; } },
+    { s: 'cffrfrffrf', at: function (i) { return [300 + i * 52, 428]; } }
+  ];
+  rows.forEach(function (row) {
+    row.s.split('').forEach(function (k, i) {
+      var p = row.at(i), c = document.createElementNS(ns, 'circle');
+      c.setAttribute('cx', p[0]); c.setAttribute('cy', p[1]); c.setAttribute('r', k === 'y' ? 13 : 9);
+      c.setAttribute('fill', color[k]);
+      if (k === 'y') { c.setAttribute('stroke', '#fff'); c.setAttribute('stroke-width', 3); }
+      g.appendChild(c);
+    });
+  });
+})();
+
+/* ===========================================
+   SLIDE PRESENTATION CONTROLLER
+   Arrows / Space / PageUp-Down / wheel / swipe. Scales the 1920×1080 stage.
+   =========================================== */
+class SlidePresentation {
+  constructor() {
+    this.slides = document.querySelectorAll('.slide');
+    this.stage = document.getElementById('deckStage');
+    this.progress = document.getElementById('progress');
+    this.current = 0;
+    this.setupStageScale();
+    this.setupKeyboardNav();
+    this.setupWheelNav();
+    this.setupTouchNav();
+    const fromHash = parseInt(location.hash.slice(1), 10);
+    this.show(Number.isFinite(fromHash) ? fromHash - 1 : 0);
+  }
+  setupStageScale() {
+    const scale = () => {
+      const f = Math.min(innerWidth / 1920, innerHeight / 1080);
+      this.stage.style.transform = `translate(${(innerWidth - 1920 * f) / 2}px, ${(innerHeight - 1080 * f) / 2}px) scale(${f})`;
+    };
+    scale(); addEventListener('resize', scale);
+  }
+  setupKeyboardNav() {
+    document.addEventListener('keydown', (e) => {
+      if (e.target.isContentEditable) return;
+      if (['ArrowRight', 'ArrowDown', ' ', 'PageDown'].includes(e.key)) { e.preventDefault(); this.show(this.current + 1); }
+      if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); this.show(this.current - 1); }
+      if (e.key === 'Home') this.show(0);
+      if (e.key === 'End') this.show(this.slides.length - 1);
+    });
+  }
+  setupWheelNav() {
+    let lock = false;
+    addEventListener('wheel', (e) => {
+      if (lock || Math.abs(e.deltaY) < 30) return;
+      lock = true; setTimeout(() => (lock = false), 800);
+      this.show(this.current + (e.deltaY > 0 ? 1 : -1));
+    }, { passive: true });
+  }
+  setupTouchNav() {
+    let x0 = null;
+    addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+    addEventListener('touchend', (e) => {
+      if (x0 === null) return;
+      const dx = e.changedTouches[0].clientX - x0; x0 = null;
+      if (Math.abs(dx) > 50) this.show(this.current + (dx < 0 ? 1 : -1));
+    });
+  }
+  show(i) {
+    i = Math.max(0, Math.min(i, this.slides.length - 1));
+    const prev = this.slides[this.current];
+    this.current = i;
+    this.slides.forEach((s, n) => { s.classList.toggle('active', n === i); s.classList.toggle('visible', n === i); });
+    this.progress.style.width = ((i + 1) / this.slides.length * 100) + '%';
+    history.replaceState(null, '', '#' + (i + 1));
+    document.dispatchEvent(new CustomEvent('slidechange', { detail: { slide: this.slides[i], prev } }));
+  }
+}
+const deck = new SlidePresentation();
+
+/* ===========================================
+   LIVE DEMO: load the app in the phone when the demo slide opens,
+   unload it when leaving, and light up steps as the app reports them.
+   =========================================== */
+(function () {
+  const slide = document.getElementById('demoSlide');
+  const frame = document.getElementById('demoFrame');
+  const steps = [...slide.querySelectorAll('.dstep')];
+  const order = steps.map((s) => s.dataset.step);
+  let timer = null;
+  function mark(step) {
+    const n = step === 'done' ? order.length : order.indexOf(step);
+    steps.forEach((s, i) => { s.classList.toggle('done', i < n); s.classList.toggle('on', i === n); });
+  }
+  function start() {
+    mark(null);
+    clearTimeout(timer);
+    // Short delay so the slide's entrance animation plays first
+    timer = setTimeout(() => { frame.src = '../web/index.html?demo=1&t=' + Date.now(); }, 700);
+  }
+  function stop() { clearTimeout(timer); frame.src = 'about:blank'; mark(null); }
+  addEventListener('message', (e) => {
+    const d = e.data;
+    if (!d || !d.parkoraDemo) return;
+    mark(d.parkoraDemo === 'done' ? 'done' : d.step);
+  });
+  document.getElementById('replay').addEventListener('click', start);
+  document.addEventListener('slidechange', (e) => {
+    if (e.detail.slide === slide) start();
+    else if (e.detail.prev === slide) stop();
+  });
+  if (deck.slides[deck.current] === slide) start();
+})();
+
+/* ===========================================
+   INLINE EDITING: hover top-left corner or press E.
+   Text edits auto-save to localStorage; Ctrl/Cmd+S downloads the edited HTML.
+   =========================================== */
+(function () {
+  const KEY = 'parkora-deck-edits-v2';
+  const sel = '.slide h1, .slide h2, .slide h3, .slide p, .slide .k, .slide .chip, .slide .lbl, .slide .dstep';
+  const nodes = [...document.querySelectorAll(sel)];
+  try { const saved = JSON.parse(localStorage.getItem(KEY) || '{}'); nodes.forEach((n, i) => { if (saved[i] != null) n.innerHTML = saved[i]; }); } catch (e) {}
+  const editor = {
+    isActive: false,
+    toggleEditMode() {
+      this.isActive = !this.isActive;
+      document.body.classList.toggle('editing', this.isActive);
+      toggle.classList.toggle('active', this.isActive);
+      nodes.forEach((n) => n.setAttribute('contenteditable', this.isActive ? 'true' : 'false'));
+      if (!this.isActive) this.save();
+    },
+    save() {
+      const data = {}; nodes.forEach((n, i) => { data[i] = n.innerHTML; });
+      try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {}
+    },
+    download() {
+      this.save();
+      const clone = document.documentElement.cloneNode(true);
+      clone.querySelectorAll('[contenteditable]').forEach((n) => n.removeAttribute('contenteditable'));
+      clone.querySelector('body').classList.remove('editing');
+      const blob = new Blob(['<!DOCTYPE html>\n' + clone.outerHTML], { type: 'text/html' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'parkora.html'; a.click();
+    }
+  };
+  const toggle = document.getElementById('editToggle');
+  const hotzone = document.querySelector('.edit-hotzone');
+  let hideTimeout = null;
+  toggle.addEventListener('click', () => editor.toggleEditMode());
+  hotzone.addEventListener('click', () => editor.toggleEditMode());
+  hotzone.addEventListener('mouseenter', () => { clearTimeout(hideTimeout); toggle.classList.add('show'); });
+  hotzone.addEventListener('mouseleave', () => { hideTimeout = setTimeout(() => { if (!editor.isActive) toggle.classList.remove('show'); }, 400); });
+  toggle.addEventListener('mouseenter', () => clearTimeout(hideTimeout));
+  toggle.addEventListener('mouseleave', () => { hideTimeout = setTimeout(() => { if (!editor.isActive) toggle.classList.remove('show'); }, 400); });
+  document.addEventListener('input', () => editor.save());
+  document.addEventListener('keydown', (e) => {
+    if ((e.key === 'e' || e.key === 'E') && !e.target.isContentEditable && !e.metaKey && !e.ctrlKey) editor.toggleEditMode();
+    if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); editor.download(); }
+  });
+})();
+</script>
+</body>
+</html>
