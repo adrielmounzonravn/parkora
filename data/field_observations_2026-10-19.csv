@@ -1,0 +1,18 @@
+date,session,time_window,measurement,seq,seconds,notes
+2026-10-19,morning,10:00-12:00,spot_refill,1,37,
+2026-10-19,morning,10:00-12:00,spot_refill,2,15,
+2026-10-19,morning,10:00-12:00,spot_refill,3,98,
+2026-10-19,morning,10:00-12:00,spot_refill,4,43,
+2026-10-19,morning,10:00-12:00,spot_refill,5,67,
+2026-10-19,morning,10:00-12:00,search_followed_car,1,433,3 laps around the block before finding a freed spot; heavy traffic
+2026-10-19,afternoon,14:30-16:30,spot_refill,1,115,
+2026-10-19,afternoon,14:30-16:30,spot_refill,2,42,
+2026-10-19,afternoon,14:30-16:30,spot_refill,3,53,
+2026-10-19,afternoon,14:30-16:30,spot_refill,4,88,
+2026-10-19,afternoon,14:30-16:30,spot_refill,5,74,
+2026-10-19,afternoon,14:30-16:30,spot_refill,6,55,
+2026-10-19,afternoon,14:30-16:30,spot_refill,7,38,
+2026-10-19,afternoon,14:30-16:30,search_followed_car,1,351,laps around the block before finding a freed spot
+2026-10-19,night,19:00-20:00,spot_refill,1,153,other spots were free; drivers parked elsewhere
+2026-10-19,night,19:00-20:00,spot_refill,2,221,other spots were free; drivers parked elsewhere
+2026-10-19,night,19:00-20:00,spot_refill,3,142,other spots were free; drivers parked elsewhere

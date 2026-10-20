@@ -243,6 +243,15 @@ The survey was run in Cochabamba, Bolivia, the planned MVP pilot city; the produ
 - **Commitment test:** landing page "Reserve your spot in Centro Cochabamba" with pre-registration or pre-reservation. Success: ≥10% of visitors leave their details.
 - **Fix the survey:** use ranges that don't touch the threshold (e.g., "less than 10 min" / "10 to 20 min") and distribute it outside my close circle. If criterion 1 still fails (<60%) → narrow to the most critical areas or times.
 
+### B7. Field observation (2026-10-19)
+
+Since nobody times their parking search, the survey ranges were checked on the street: stopwatch measurements on the MVP blocks (Calles 25 de Mayo, Bolívar, and Sucre) in the morning, afternoon, and night. Full detail in [field_observations.md](field_observations.md).
+
+- **High demand at peak hours, observed directly:** in the morning and afternoon the spots were full, and freed spots were retaken in a median of **~1 min** (n=12, all under 2 min).
+- **Searching takes real time:** the two drivers followed needed **7 min 13 s** and **5 min 51 s**, circling the block several times.
+- **Matches the survey's "5 to 10 min":** the pain is real and frequent at peak times, but still below the 10-min threshold of criterion 1.
+- **Time-dependent:** at night there were free spots and demand dropped.
+
 ---
 
 ## C. Competitor research
