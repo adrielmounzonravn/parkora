@@ -252,6 +252,16 @@ Since nobody times their parking search, the survey ranges were checked on the s
 - **Matches the survey's "5 to 10 min":** the pain is real and frequent at peak times, but still below the 10-min threshold of criterion 1.
 - **Time-dependent:** at night there were free spots and demand dropped.
 
+### B8. Street interviews (2026-10-20 and 2026-10-21)
+
+To fix the survey's weak points (close-circle sample, closed options), I interviewed in person **3 drivers completely unknown to me**, chosen because I saw them parking or circling the block on the MVP blocks: exactly the target customer, not random form respondents. Full detail in [street_interviews.md](street_interviews.md).
+
+- **3/3** say it's almost always hard to park in the area during working hours.
+- **3/3** would pay **a little more** than today for a guaranteed spot.
+- **3/3** approved the MVP and liked the idea a lot.
+- **Suggestions:** continuous enforcement by the city; manage excess demand (people reserving all day Monday to Friday) with queues, frequency limits, or variable pricing by zone, time, and duration; keep zones without reservations; allow extending (priority to the current holder) and ending early (partial refund or release the spot).
+- **Direction to validate:** reservations only in certain zones, with variable pricing by time, zone, and length of stay.
+
 ---
 
 ## C. Competitor research
