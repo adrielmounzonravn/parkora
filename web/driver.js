@@ -7,6 +7,8 @@
   }
   function norm(s) { return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
   function window_(r) { return U.fmtTime(r.inicio) + ' – ' + U.fmtTime(r.fin); }
+  function pct(x) { return Math.round(x * 100); }
+  function peakText() { return R.horasPico.map(function (p) { return p[0] + '–' + p[1]; }).join(', '); }
 
   // Estado de un espacio ahora → { cls, text, color }
   function status(id) {
@@ -24,12 +26,34 @@
     pendiente_pago: ['badge-occupied', 'res.pending'],
     activa: ['badge-free', 'res.active'],
     cancelada: ['badge-reserved', 'res.canceled'],
-    reembolsada: ['badge-casual', 'res.refunded']
+    reembolsada: ['badge-casual', 'res.refunded'],
+    terminada: ['badge-reserved', 'res.endedEarly'],
+    no_show: ['badge-reserved', 'res.noShow']
   };
   function stateBadge(r) {
     var b = STATE_BADGE[r.estado] || ['badge-reserved', r.estado];
     if (r.estado === 'activa' && r.fin <= Store.now()) b = ['badge-reserved', 'res.ended'];
     return '<span class="badge ' + b[0] + '">' + U.esc(t(b[1])) + '</span>';
+  }
+
+  // Tarifa por hora de cada calle ahora, de la más barata a la más cara
+  function pricesCard() {
+    var n = Store.now(), calles = {};
+    Store.listSpots().forEach(function (s) { calles[s.calle] = s.demanda; });
+    var rows = Object.keys(calles).map(function (c) { return { calle: c, demanda: calles[c], tarifa: Store.hourlyRate(calles[c], n) }; })
+      .sort(function (a, b) { return a.tarifa - b.tarifa; });
+    var min = rows[0].tarifa, max = rows[rows.length - 1].tarifa;
+    return '<div class="card"><div class="row between"><h2>' + t('map.pricesNow') + '</h2>' +
+      (Store.isPeak(n) ? '<span class="badge badge-warn">' + t('map.peak') + '</span>' : '<span class="badge badge-free">' + t('map.offPeak') + '</span>') + '</div>' +
+      '<ul class="list">' + rows.map(function (x) {
+        return '<li><span>' + U.esc(x.calle) + (x.demanda === 'alta' ? ' <span class="badge badge-warn">' + t('map.highDemand') + '</span>' : '') + '</span>' +
+          '<span>' + (x.tarifa === min && min < max ? '<span class="badge badge-free">' + t('map.cheaper') + '</span> ' : '') +
+          '<b>' + t('map.perHour', { amount: U.fmtBs(x.tarifa) }) + '</b></span></li>';
+      }).join('') + '</ul>' +
+      '<p class="muted">' + t('map.pricingNote', {
+        peak: peakText(), pico: pct(R.recargoPico), alta: pct(R.recargoDemandaAlta),
+        h: R.duracionSinRecargoMin / 60 + 1, largo: pct(R.recargoDuracion), after: R.horaCierre
+      }) + '</p></div>';
   }
 
   // ---------- 1. Mapa ----------
@@ -43,7 +67,9 @@
       '<div class="legend"><span><span class="dot" style="background:var(--free)"></span> ' + t('map.legendFree') + '</span>' +
       '<span><span class="dot" style="background:var(--reserved)"></span> ' + t('map.legendReserved') + '</span>' +
       '<span><span class="dot" style="background:var(--casual)"></span> ' + t('map.legendCasual') + '</span></div>' +
-      '<div class="card"><ul class="list" id="spots"></ul></div>' + simNote() + '</div>';
+      pricesCard() +
+      '<div class="card"><ul class="list" id="spots"></ul></div>' + simNote() +
+      '<p class="muted center">' + t('common.refNote') + '</p></div>';
 
     var lmap = null, layer = null;
     if (window.L) {
@@ -81,18 +107,21 @@
   }
 
   // ---------- 2. Detalle + elegir horario ----------
+  // params: [espacioId, inicio?, fin?] (inicio y fin en ms, desde la lista de espera)
   function spot(params, el) {
     var s = Store.getSpot(params[0]);
+    var preset = params[1] ? [+params[1], +params[2]] : null;
     if (!s) { el.innerHTML = '<div class="card">' + t('spot.notFound') + ' <a href="#/">' + t('spot.backToMap') + '</a></div>'; return; }
     var head =
       '<a href="#/">' + t('spot.back') + '</a>' +
       '<div class="card"><div class="row between"><h1>' + t('spot.title', { n: s.numero }) + '</h1>' + badge(status(s.id)) + '</div>' +
       '<p>' + U.esc(s.calle) + ' · ' + U.esc(DATA.zona.nombre) + '</p>' +
-      '<p class="muted">' + t('spot.rate', { rate: R.tarifaHora, block: R.bloqueMin, from: R.horaApertura, to: R.horaCierre }) + '</p></div>';
+      '<p class="muted">' + t('spot.rateNow', { amount: U.fmtBs(Store.hourlyRate(s.demanda, Store.now())), base: U.fmtBs(R.tarifaHora), from: R.horaApertura, to: R.horaCierre }) +
+      (s.demanda === 'alta' ? ' · ' + t('spot.highDemand', { n: pct(R.recargoDemandaAlta) }) : '') + '</p></div>';
 
     if (s.tipo === 'casual') {
       el.innerHTML = '<div class="stack">' + head +
-        '<div class="card"><h2>' + t('spot.casualTitle') + '</h2><p>' + t('spot.casualText') + '</p></div>' +
+        '<div class="card"><h2>' + t('spot.casualTitle') + '</h2><p>' + t('spot.casualText', { after: R.horaCierre }) + '</p></div>' +
         '<a class="btn btn-block" href="#/">' + t('spot.otherSpots') + '</a></div>';
       return;
     }
@@ -117,9 +146,12 @@
       '<div><label for="f-out">' + t('spot.departure') + '</label><select id="f-out"></select></div></div>' +
       '<div class="field"><label for="f-placa">' + t('spot.plate') + '</label><input id="f-placa" placeholder="1234-ABC" autocomplete="off"></div>' +
       '<div class="field row between"><b>' + t('spot.total') + '</b><b id="total" style="font-size:1.3rem"></b></div>' +
+      '<p class="muted" id="breakdown"></p>' +
       '<p class="error" id="err"></p>' +
       '<button class="btn btn-primary btn-block" id="go">' + t('spot.continue') + '</button>' +
-      '<p class="muted" style="margin-top:.6rem">' + t('spot.policy', { cancel: R.cancelacionGratisMin, tol: R.toleranciaMin }) + '</p>' +
+      '<button class="btn btn-block" id="wait" style="display:none;margin-top:.5rem">' + t('spot.waitlist') + '</button>' +
+      '<p class="muted" style="margin-top:.6rem">' + t('spot.policy', { cancel: R.cancelacionGratisMin, tol: R.toleranciaMin, refund: pct(R.reembolsoAnticipado) }) + '</p>' +
+      '<p class="muted">' + t('spot.limits', { day: R.reservasPorDiaMax, week: R.diasPorSemanaMax }) + '</p>' +
       '</div>' + simNote() + '</div>';
 
     var $ = function (id) { return el.querySelector(id); };
@@ -144,15 +176,31 @@
       fOut.innerHTML = opts(list, !reset && list.indexOf(prev) >= 0 ? prev : def);
       update();
     }
+    function breakdown(p) {
+      var parts = [];
+      if (p.alta) parts.push(t('spot.surHigh', { n: pct(R.recargoDemandaAlta) }));
+      if (p.bloquesPico) parts.push(t('spot.surPeak', { n: pct(R.recargoPico), b: p.bloquesPico }));
+      if (p.bloquesLargos) parts.push(t('spot.surLong', { n: pct(R.recargoDuracion), b: p.bloquesLargos }));
+      return parts.length ? t('spot.includes') + ' ' + parts.join(' · ') : t('spot.noSurcharge');
+    }
     function update() {
-      var r = range(), v = Store.validate(s.id, r[0], r[1]);
-      $('#total').textContent = U.fmtBs(Store.price(r[0], r[1]).total);
+      var r = range(), v = Store.validate(s.id, r[0], r[1], $('#f-placa').value.trim()), p = Store.price(r[0], r[1], s.id);
+      $('#total').textContent = U.fmtBs(p.total);
+      $('#breakdown').textContent = breakdown(p);
       $('#err').textContent = v.ok ? '' : v.error;
       $('#go').disabled = !v.ok;
+      $('#wait').style.display = v.code === 'ocupado' ? '' : 'none';
     }
     fDia.addEventListener('change', fillArrivals);
     fIn.addEventListener('change', function () { fillDepartures(false); });
     fOut.addEventListener('change', update);
+    $('#f-placa').addEventListener('input', update);
+    $('#wait').addEventListener('click', function () {
+      var r = range(), res = Store.joinWaitlist({ espacioId: s.id, inicio: r[0], fin: r[1], placa: $('#f-placa').value });
+      if (!res.ok) { $('#err').textContent = res.error; return; }
+      alert(t('wl.joined', { n: res.posicion }));
+      App.go('#/mis-reservas');
+    });
     $('#go').addEventListener('click', function () {
       var r = range();
       var res = Store.createReservation({ espacioId: s.id, inicio: r[0], fin: r[1], placa: $('#f-placa').value });
@@ -160,6 +208,13 @@
       App.go('#/pago/' + res.reserva.id);
     });
     fillArrivals();
+    if (preset && days.indexOf(U.startOfDay(preset[0])) >= 0) {
+      fDia.value = U.startOfDay(preset[0]);
+      fillArrivals();
+      if (arrivals(+fDia.value).indexOf(U.fmtTime(preset[0])) >= 0) { fIn.value = U.fmtTime(preset[0]); fillDepartures(true); }
+      fOut.value = U.fmtTime(preset[1]);
+      update();
+    }
   }
 
   // ---------- 3. Pago QR simulado ----------
@@ -203,10 +258,15 @@
       '<div class="card center">' + fakeQr(r.id + r.placa) +
       '<p style="margin-top:.6rem"><b>' + U.fmtBs(r.monto) + '</b> · ' + t('pay.scan') + '</p></div>' +
       '<button class="btn btn-primary btn-block" id="paid">' + t('pay.paid') + '</button>' +
-      '<a class="btn btn-ghost btn-block" href="#/espacio/' + r.espacioId + '">' + t('pay.back') + '</a></div>';
+      '<button class="btn btn-ghost btn-block" id="back">' + t('pay.back') + '</button></div>';
     el.querySelector('#paid').addEventListener('click', function () {
       Store.pay(r.id);
       App.go('#/reserva/' + r.id);
+    });
+    // Volver anula la reserva pendiente para que no siga ocupando el espacio
+    el.querySelector('#back').addEventListener('click', function () {
+      Store.cancel(r.id);
+      App.go('#/espacio/' + r.espacioId);
     });
   }
 
@@ -225,18 +285,51 @@
     } else if (r.estado === 'cancelada') {
       top = '<div class="card"><h2>' + t('conf.canceledTitle') + '</h2><p class="muted">' +
         (r.reembolsoCancelacion ? t('conf.refunded', { amount: U.fmtBs(r.monto) }) : t('conf.noRefund', { n: R.cancelacionGratisMin })) + '</p></div>';
+    } else if (r.estado === 'terminada') {
+      top = '<div class="card"><h2>' + t('conf.endedTitle') + '</h2><p class="muted">' +
+        t('conf.endedText', { t: U.fmtTime(r.fin), amount: U.fmtBs(r.reembolsoAnticipado || 0) }) + '</p></div>';
+    } else if (r.estado === 'no_show') {
+      top = '<div class="card alert"><h2>' + t('conf.noShowTitle') + '</h2><p>' + t('conf.noShowText', { n: R.toleranciaMin }) + '</p></div>';
     } else if (r.estado === 'pendiente_pago') {
       top = '<div class="card alert"><h2>' + t('conf.pendingTitle') + '</h2><a class="btn btn-primary" href="#/pago/' + r.id + '">' + t('conf.goToPay') + '</a></div>';
     }
     var live = r.estado === 'activa' && r.fin > now && U.sameDay(r.inicio, now);
+    var upcoming = r.estado === 'activa' && r.fin > now;
+    var started = live && r.inicio <= now;
+    var ext = upcoming ? Store.extensionOptions(r.id) : [];
+    var prio = Store.finPrioridad(r);
+    var manage = upcoming ? '<div class="card"><h2>' + t('conf.extendTitle') + '</h2>' +
+      (ext.length ? '<div class="row">' + ext.map(function (o) {
+        return '<button class="btn btn-sm" data-ext="' + o.minutos + '">' + t('conf.extendBtn', { t: U.fmtTime(o.fin), amount: U.fmtBs(o.extra) }) + '</button>';
+      }).join('') + '</div>' : '<p class="muted">' + t('conf.cantExtend') + '</p>') +
+      '<p class="muted" style="margin-top:.5rem">' + (now < prio ? t('conf.priority', { n: R.prioridadExtenderMin, t: U.fmtTime(prio) }) : t('conf.priorityOver')) + '</p>' +
+      (started ? '<button class="btn btn-block" id="end" style="margin-top:.5rem">' + t('conf.endNow') + '</button>' +
+        '<p class="muted" style="margin-top:.4rem">' + t('conf.endHint', { n: pct(R.reembolsoAnticipado), amount: U.fmtBs(Store.earlyRefund(r)) }) + '</p>' : '') +
+      '</div>' : '';
+    var last = Store.lastRound();
+    var patrol = upcoming ? '<p class="muted">' + t('conf.patrol', { n: R.rondaCadaMin, t: last ? U.fmtTime(last) : '—', resp: R.respuestaMin }) + '</p>' : '';
     el.innerHTML = '<div class="stack">' + top +
       '<div class="card">' + summary(r, !!r.pagadaEn) + '</div>' +
       '<a class="btn btn-block" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=' + s.lat + ',' + s.lng + '">' + t('conf.directions') + '</a>' +
-      (live ? '<button class="btn btn-danger btn-block" id="occ">' + t('conf.occupied') + '</button>' : '') +
+      manage +
+      (live ? '<button class="btn btn-danger btn-block" id="occ">' + t('conf.occupied') + '</button>' : '') + patrol +
       '<div class="row between"><a href="#/mis-reservas">' + t('map.myReservations') + '</a><a href="#/">' + t('spot.backToMap') + '</a></div>' + simNote() + '</div>';
     if (live) el.querySelector('#occ').addEventListener('click', function () {
       if (!confirm(t('conf.occupiedConfirm', { n: s.numero }))) return;
       Store.reportOccupied(r.id);
+      reservation(params, el);
+    });
+    el.querySelectorAll('[data-ext]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var o = ext.filter(function (x) { return x.minutos === +b.getAttribute('data-ext'); })[0];
+        if (!confirm(t('conf.extendConfirm', { t: U.fmtTime(o.fin), amount: U.fmtBs(o.extra) }))) return;
+        Store.extend(r.id, o.minutos);
+        reservation(params, el);
+      });
+    });
+    if (started) el.querySelector('#end').addEventListener('click', function () {
+      if (!confirm(t('conf.endConfirm', { amount: U.fmtBs(Store.earlyRefund(r)) }))) return;
+      Store.endEarly(r.id);
       reservation(params, el);
     });
   }
@@ -253,14 +346,31 @@
         U.fmtDate(r.inicio) + ' · ' + window_(r) + '</span></a><span class="stack" style="text-align:right">' + stateBadge(r) +
         (upcoming.indexOf(r) >= 0 && r.inicio > now ? '<br><button class="btn btn-sm" data-cancel="' + r.id + '">' + t('my.cancel') + '</button>' : '') + '</span></li>';
     }
+    var waiting = Store.listWaitlist().filter(function (e) { return (e.estado === 'esperando' || e.estado === 'disponible') && e.fin > now; });
+    function waitItem(e) {
+      var s = Store.getSpot(e.espacioId);
+      var ready = e.estado === 'disponible';
+      return '<li><a href="#/espacio/' + s.id + '/' + e.inicio + '/' + e.fin + '"><b>' + t('common.spotNo', { n: s.numero }) + ' · ' + U.esc(s.calle) + '</b><br><span class="muted">' +
+        U.fmtDate(e.inicio) + ' · ' + window_(e) + '</span>' + (ready ? '<br><b>' + t('wl.reserveNow') + '</b>' : '') + '</a><span class="stack" style="text-align:right">' +
+        (ready ? '<span class="badge badge-free">' + t('wl.available') + '</span>' : '<span class="badge badge-warn">' + t('wl.position', { n: Store.waitlistPosition(e) }) + '</span>') +
+        '<br><button class="btn btn-sm" data-leave="' + e.id + '">' + t('wl.leave') + '</button></span></li>';
+    }
     function section(title, list) {
       return '<div class="card"><h2>' + title + '</h2>' +
         (list.length ? '<ul class="list">' + list.map(item).join('') + '</ul>' : '<p class="muted">' + t('my.empty') + '</p>') + '</div>';
     }
     el.innerHTML = '<div class="stack"><div class="row between"><h1>' + t('my.title') + '</h1><a href="#/">' + t('spot.back') + '</a></div>' +
+      (waiting.length ? '<div class="card' + (waiting.some(function (e) { return e.estado === 'disponible'; }) ? ' success' : '') + '"><h2>' + t('wl.title') + '</h2>' +
+        '<p class="muted">' + t('wl.how') + '</p><ul class="list">' + waiting.map(waitItem).join('') + '</ul></div>' : '') +
       (all.length ? section(t('my.upcoming'), upcoming) + section(t('my.past'), past)
-        : '<div class="card center"><p>' + t('my.none') + '</p><a class="btn btn-primary" href="#/">' + t('my.reserve') + '</a></div>') +
+        : waiting.length ? '' : '<div class="card center"><p>' + t('my.none') + '</p><a class="btn btn-primary" href="#/">' + t('my.reserve') + '</a></div>') +
       simNote() + '</div>';
+    el.querySelectorAll('[data-leave]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        Store.leaveWaitlist(b.getAttribute('data-leave'));
+        myReservations(params, el);
+      });
+    });
     el.querySelectorAll('[data-cancel]').forEach(function (b) {
       b.addEventListener('click', function () {
         var r = Store.getReservation(b.getAttribute('data-cancel'));

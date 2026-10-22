@@ -1,6 +1,9 @@
 // Datos de ejemplo de la demo. Zona piloto: Centro – Plaza 14 de Septiembre, Cochabamba.
 (function () {
   var CASUALES = [10, 20, 21, 30];
+  // Nivel de demanda por calle (valores referenciales). Bolívar y 25 de Mayo cuestan más para
+  // repartir la demanda hacia Sucre, que queda más barata.
+  var DEMANDA = { 'Calle Bolívar': 'alta', 'Calle 25 de Mayo': 'alta', 'Calle Sucre': 'normal' };
 
   // Tres cuadras junto a la plaza (geometría de OpenStreetMap), 10 espacios por cuadra, en línea
   // junto a la acera interior de la manzana, a ~2 m del eje, ~6,5 m entre espacios y ~15 m libres en cada esquina.
@@ -38,6 +41,7 @@
         id: n,
         numero: n,
         calle: c.calle,
+        demanda: DEMANDA[c.calle] || 'normal',
         lat: pt[0],
         lng: pt[1],
         tipo: CASUALES.indexOf(n) >= 0 ? 'casual' : 'reservable'
@@ -90,9 +94,27 @@
     reglas: {
       horaApertura: '08:00',
       horaCierre: '16:00',
-      tarifaHora: 2,          // Bs por hora
+      tarifaHora: 2,          // Bs por hora (tarifa base)
       bloqueMin: 30,          // se cobra por bloques de 30 min
-      precioBloque: 1,        // Bs por bloque
+      precioBloque: 1,        // Bs por bloque (tarifa base)
+      // Precio variable (valores referenciales, de la observación de campo y las entrevistas en la calle).
+      // Los recargos se suman sobre la tarifa base de cada bloque.
+      recargoDemandaAlta: 0.25,                        // calles de alta demanda
+      horasPico: [['10:00', '12:30'], ['14:30', '16:00']], // espacios llenos en la observación de campo
+      recargoPico: 0.5,
+      duracionSinRecargoMin: 120,                      // desde la 3ª hora, cada bloque paga recargo
+      recargoDuracion: 0.5,
+      redondeo: 0.5,                                   // el total se redondea a Bs 0,50
+      // Límites por placa contra el acaparamiento (reservar todo el día, todos los días)
+      reservasPorDiaMax: 2,
+      diasPorSemanaMax: 3,
+      // Extender y terminar antes
+      prioridadExtenderMin: 30, // los 30 min tras una reserva quedan para su titular...
+      liberarPrioridadMin: 15,  // ...hasta 15 min antes de que termine
+      reembolsoAnticipado: 0.5, // se devuelve el 50% de los bloques no usados
+      // Control continuo
+      rondaCadaMin: 30,         // ronda del inspector por la zona
+      respuestaMin: 15,         // meta de respuesta a "mi espacio está ocupado"
       duracionMinMin: 30,
       duracionMaxMin: 240,
       anticipacionMaxDias: 7,

@@ -2,7 +2,7 @@
 (function () {
   var routes = [
     [/^#?\/?$/,                       function () { return DriverViews.map; }],
-    [/^#\/espacio\/([^/]+)$/,          function () { return DriverViews.spot; }],
+    [/^#\/espacio\/([^/]+)(?:\/(\d+)\/(\d+))?$/, function () { return DriverViews.spot; }],
     [/^#\/pago\/([^/]+)$/,             function () { return DriverViews.pay; }],
     [/^#\/reserva\/([^/]+)$/,          function () { return DriverViews.reservation; }],
     [/^#\/mis-reservas$/,              function () { return DriverViews.myReservations; }],
@@ -45,7 +45,7 @@
         var m = hash.match(routes[i][0]);
         if (m) {
           el.innerHTML = '';
-          routes[i][1]()(m.slice(1).map(decodeURIComponent), el);
+          routes[i][1]()(m.slice(1).map(function (x) { return x == null ? x : decodeURIComponent(x); }), el);
           window.scrollTo(0, 0);
           return;
         }

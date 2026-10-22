@@ -26,9 +26,13 @@
   function inspector(params, el) {
     var abiertos = Store.listIncidents({ abiertos: true });
     var spots = Store.listSpots().sort(function (a, b) { return a.numero - b.numero; });
+    var last = Store.lastRound(), due = last ? last + R.rondaCadaMin * 60e3 : null, late = !last || Store.now() > due;
     el.innerHTML = '<div class="stack">' +
       '<h1>' + t('insp.title') + '</h1>' +
       '<p class="muted">' + U.esc(DATA.zona.nombre) + ' · ' + U.fmtDate(Store.now()) + ' ' + U.fmtTime(Store.now()) + '</p>' +
+      '<div class="card' + (late ? ' alert' : '') + '"><div class="row between"><h2>' + t('insp.patrolTitle') + '</h2>' +
+      '<button class="btn btn-sm btn-primary" id="round">' + t('insp.roundDone') + '</button></div>' +
+      '<p class="muted">' + t('insp.patrolText', { n: R.rondaCadaMin, last: last ? U.fmtTime(last) : '—', next: due ? U.fmtTime(due) : '—' }) + '</p></div>' +
       '<h2>' + t('insp.openIncidents', { n: abiertos.length }) + '</h2>' +
       (abiertos.length ? abiertos.map(function (i) {
         var s = Store.getSpot(i.espacioId);
@@ -48,6 +52,10 @@
         inspector(params, el);
       });
     });
+    el.querySelector('#round').addEventListener('click', function () {
+      Store.addRound();
+      inspector(params, el);
+    });
   }
 
   // ---------- Inspector: detalle del espacio ----------
@@ -55,6 +63,8 @@
     var s = Store.getSpot(params[0]);
     if (!s) { el.innerHTML = '<div class="card">' + t('spot.notFound') + ' <a href="#/inspector">' + t('insp.backToList') + '</a></div>'; return; }
     var a = Store.availability(s.id), cur = Store.spotState(s.id);
+    // Pasada la tolerancia de llegada, el inspector puede liberar el espacio si el auto no llegó
+    var noShow = a.reservaActual && Store.now() >= a.reservaActual.inicio + R.toleranciaMin * 60e3;
     var inc = Store.listIncidents({ abiertos: true }).filter(function (i) { return i.espacioId === s.id; })[0];
     function resLine(label, r) {
       return '<li><span class="muted">' + label + '</span><span>' +
@@ -69,6 +79,7 @@
       '<div class="card"><div class="row between"><h1>' + t('insp.spot', { n: s.numero }) + '</h1>' + spotBadge(s.id) + '</div>' +
       '<p>' + U.esc(s.calle) + ' · ' + (s.tipo === 'casual' ? t('insp.typeCasual') : t('insp.typeReservable')) + '</p>' +
       (s.tipo === 'reservable' ? '<ul class="list">' + resLine(t('insp.currentRes'), a.reservaActual) + resLine(t('insp.nextRes'), a.proximaReserva) + '</ul>' : '') +
+      (noShow ? '<button class="btn btn-sm" id="noshow">' + t('insp.noShow') + '</button>' : '') +
       '</div>' +
       (inc ? '<div class="card alert"><p>' + t('insp.incidentText', { plate: U.esc(inc.placaEsperada), t: U.fmtTime(inc.creado) }) + '</p></div>' : '') +
       '<div class="card"><h2>' + t('insp.spotStatus') + '</h2><div class="row">' +
@@ -90,6 +101,11 @@
         Store.setSpotState(s.id, b.getAttribute('data-state'));
         inspectorSpot(params, el);
       });
+    });
+    if (noShow) el.querySelector('#noshow').addEventListener('click', function () {
+      if (!confirm(t('insp.noShowConfirm', { plate: a.reservaActual.placa, n: R.toleranciaMin }))) return;
+      Store.releaseNoShow(a.reservaActual.id);
+      inspectorSpot(params, el);
     });
     el.querySelector('#i-go').addEventListener('click', function () {
       var res = Store.addInfraction({
@@ -113,7 +129,11 @@
   }
   function tr(cells) { return '<tr>' + cells.map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>'; }
 
-  var RES_ESTADO = { activa: 'res.active', pendiente_pago: 'res.pending', cancelada: 'res.canceled', reembolsada: 'res.refunded' };
+  var RES_ESTADO = {
+    activa: 'res.active', pendiente_pago: 'res.pending', cancelada: 'res.canceled', reembolsada: 'res.refunded',
+    terminada: 'res.endedEarly', no_show: 'res.noShow'
+  };
+  function pctOf(x) { return Math.round(x * 100); }
 
   function alcaldia(params, el) {
     var m = Store.metrics(), pct = Math.round(R.comisionApp * 100);
@@ -128,6 +148,10 @@
       metric(m.respetadas + '%', t('city.respected')) +
       metric(m.incidentesAbiertos, t('city.openIncidents')) +
       metric(m.infraccionesHoy, t('city.violationsToday')) +
+      metric(U.fmtBs(m.precioHora), t('city.avgHour')) +
+      metric(m.liberadas, t('city.released')) +
+      metric(m.enEspera, t('city.waiting')) +
+      metric(m.rondasHoy, t('city.rounds', { t: m.ultimaRonda ? U.fmtTime(m.ultimaRonda) : '—' })) +
       '</div>' +
       '<div class="card"><div class="row between"><h2>' + t('city.resTodayTitle') + '</h2>' +
       '<input id="q" type="search" placeholder="' + t('city.searchPlate') + '" style="max-width:220px"></div><div id="res"></div></div>' +
@@ -135,6 +159,20 @@
       '<div class="card"><h2>' + t('city.rulesTitle') + '</h2><p class="muted">' + t('city.readOnly') + '</p><ul class="list">' +
       [[t('rule.hours'), R.horaApertura + '–' + R.horaCierre],
         [t('rule.rate'), t('rule.rateVal', { rate: R.tarifaHora, block: R.bloqueMin })],
+        [t('rule.pricing'), t('rule.pricingVal', {
+          alta: pctOf(R.recargoDemandaAlta), streets: DATA.espacios.filter(function (e) { return e.demanda === 'alta'; })
+            .map(function (e) { return e.calle; }).filter(function (c, i, a) { return a.indexOf(c) === i; }).join(', '),
+          peak: R.horasPico.map(function (p) { return p[0] + '–' + p[1]; }).join(', '), pico: pctOf(R.recargoPico),
+          h: R.duracionSinRecargoMin / 60 + 1, largo: pctOf(R.recargoDuracion)
+        })],
+        [t('rule.limits'), t('rule.limitsVal', { day: R.reservasPorDiaMax, week: R.diasPorSemanaMax })],
+        [t('rule.extend'), t('rule.extendVal', { n: R.prioridadExtenderMin, m: R.liberarPrioridadMin })],
+        [t('rule.early'), t('rule.earlyVal', { n: pctOf(R.reembolsoAnticipado) })],
+        [t('rule.waitlist'), t('rule.waitlistVal')],
+        [t('rule.patrol'), t('rule.patrolVal', { n: R.rondaCadaMin, resp: R.respuestaMin })],
+        [t('rule.casual'), t('rule.casualVal', {
+          spots: DATA.espacios.filter(function (e) { return e.tipo === 'casual'; }).map(function (e) { return e.numero; }).join(', '), after: R.horaCierre
+        })],
         [t('rule.duration'), t('rule.durationVal', { min: R.duracionMinMin, max: R.duracionMaxMin / 60 })],
         [t('rule.advance'), t('rule.advanceVal', { n: R.anticipacionMaxDias })],
         [t('rule.buffer'), t('rule.min', { n: R.margenMin })],

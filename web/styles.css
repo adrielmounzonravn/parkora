@@ -66,6 +66,7 @@ main.wide { max-width: 1000px; }
 .badge-casual { background: #dbeafe; color: #1e40af; }
 .badge-blocked { background: #1f2937; color: #fff; }
 .badge-occupied { background: #fee2e2; color: #991b1b; }
+.badge-warn { background: #fef3c7; color: #92400e; }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
 
 /* Forms */
